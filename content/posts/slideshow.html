@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8" />
+		<title>Unit tests for frontend</title>
+		<style>
+			img {
+    max-width: 100%;
+}
+		</style>
+	</head>
+	<body>
+		<textarea id="source">
+class: center, middle, main-title
+
+# Unit tests for frontend
+small recipe book
+
+Olga Pigareva, Jan 2021
+
+
+---
+## Agenda
+I&#39;ll not talk about
+
+
+- why unit tests are good
+- why do we really need them
+
+Disclaimer
+
+
+- my personal opinion based on experience
+ - big React SPA with complex data flow in frontend
+ - smaller vanila JS apps
+ - component libs
+ - hybrid mobile apps  
+- created as a handbook
+
+
+---
+## What is a good test
+
+- **Trustworthy**. That means that it fails only if it is broken. If tests can sometimes fail then it is flaky and can’t be called a good test.
+- **Readable/maintainable**. From reading a test, it should be clear what it tests and how it is done. It should have no boilerplate or tricky tweaks of state or control.
+- **Should verify a single use case**. This is related to the single responsibility principle. If a test verifies multiple cases then if it fails, we can’t say why exactly. A good test verifies a single use case and when it fails, we immediately know what went wrong.
+- **Isolated**. The test should not be able to influence other tests. This particularly implies that tests should not share a global state. If tests are not isolated, then the order in which they are executed can lead to unexpected results.
+
+
+---
+### Possible KPIs
+
+- How many new bugs are in new releases
+- Test coverage
+
+
+---
+## TDD in Frontend
+
+- not fun for ui development, but very compensating for utils
+- tests are written during development, not after (`jest —watch`)
+
+test should help to find logical bugs 
+
+
+---
+## What to start with: proposal
+
+1. Start with simple tests for the main pain points
+1. Tests are part of each ticket
+ - especially a bug ticket
+1. Don&#39;t do everything at once
+ - what is already covered with e2e tests
+ - clear understanding what is critical 
+1. Continuous review and rethink
+
+
+---
+## Automation: tests are part of a build process
+![testInCi.jpg](testInCi.jpg)
+
+
+---
+## Stack to consider
+
+- [Jest](https://jestjs.io/) 
+- [Sinon](https://sinonjs.org/)
+- [Enzyme](https://enzymejs.github.io/enzyme/) / [React testing library](https://testing-library.com/docs/react-testing-library/intro/)
+
+![img_1.png](img_1.png)
+
+
+---
+## Terminology
+
+- TestBed
+- Fixture
+- Assert
+- Stub
+- Mock
+- Spy
+
+
+---
+## Some recipes for jest setup
+setupTest.js
+
+```javascript
+global.fetch = require('jest-fetch-mock');
+require('jest-localstorage-mock');
+global.document.body.scrollIntoView = jest.fn();
+window.location.assign = jest.fn();
+window.scrollTo = jest.fn();
+```
+
+---
+## Test coverage config
+package.json
+
+```json
+  "jest": {
+    "collectCoverageFrom": [
+      "src/**/*.{js,jsx,ts,tsx}",
+      "!src/**/*.test.{js,jsx,ts,tsx}",
+      "!src/components/tests/**"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "branches": 0,
+        "functions": 0,
+        "lines": 0,
+        "statements": 0
+      },
+      "./src/somePath": {
+        "branches": 80,
+        "functions": 80,
+        "lines": 80,
+        "statements": 80
+      }
+    },
+    "testURL": "https://www.myPage.de/product/42?param=9b54"
+  },
+```
+
+---
+## react renderer
+```javascript
+import TestRenderer from 'react-test-renderer';
+
+function MyComponent = () => (<div>
+      <SubComponent foo="bar" />
+      <p className="my">Hello</p>
+    </div>)
+
+function SubComponent = () => <p className="sub">Sub</p>
+
+const testRenderer = TestRenderer.create(<MyComponent />);
+const testInstance = testRenderer.root;
+
+expect(testInstance.findByType(SubComponent).props.foo).toBe('bar');
+expect(testInstance.findByProps({className: "sub"}).children).toEqual(['Sub']);
+```
+https://reactjs.org/docs/test-renderer.html
+
+```javascript
+testRenderer.update()
+testRenderer.unmount()
+
+testInstance.props
+testInstance.parent
+testInstance.children
+```
+
+---
+## enzime config
+```javascript
+import Enzyme from 'enzyme';
+import Adapter from 'enzyme-adapter-react-16';
+
+Enzyme.configure({ adapter: new Adapter() });
+```
+
+---
+## mount vs shallow vs render
+
+- `mount(&lt;Component /&gt;)` for Full DOM rendering is ideal for use cases where you have components that may interact with DOM apis, or may require the full lifecycle in order to fully test the component
+- `shallow(&lt;Component /&gt;)` for Shallow rendering is useful to constrain yourself to testing a component as a unit, and to ensure that your tests aren&#39;t indirectly asserting on behavior of child components.
+- `render` is used to render react components to static HTML and analyze the resulting HTML structure.
+
+```javascript
+import { mount, shallow. render } from 'enzyme';
+```
+```javascript
+import { shallow } from 'enzyme';
+
+it('renders an `.icon-star`', () => {
+    const wrapper = shallow(<MyComponent />);
+    expect(wrapper.find('.icon-star')).to.have.lengthOf(1);
+  });
+```
+
+---
+## Test redux store
+```javascript
+import { Provider } from 'react-redux';
+import configureStore from 'redux-mock-store';
+import StateFixture from 'pathToStateFixture';
+import renderer from 'react-test-renderer';
+import Component from 'pathToComponent'
+
+it('renders a component', () => {
+    const mockStore = configureStore()({
+      ...StateFixture,
+      storeProp1: {},
+      storeProp2: {},
+    });
+    const component = renderer.create(
+      <Provider store={mockStore}>
+        <Component intl={intlMock} />
+      </Provider>
+    );
+    expect(component.toJSON()).toMatchSnapshot();
+  });
+```
+
+---
+## Partial match for complex objects
+```javascript
+const user = {
+   id: 123,
+   name: 'test-user',
+   profile: {...},
+   whatever: {...}
+ }
+```
+```javascript
+const user = prepareUserInfo('test-user'); 
+
+expect(user).toEqual(expect.objectContaining({
+  id: 123,
+  name: 'test-user'
+}));
+```
+
+---
+## User interaction: date input test
+![img.png](img.png)
+
+```javascript
+it('handles focus and blur events while focused', () => {
+        const blurMockFn = jest.fn();
+        const changeMockFn = jest.fn();
+        const component = shallow(
+          <DropdownInput
+            {...defaultProps}
+            onBlur={blurMockFn}
+            onChange={changeMockFn}
+          />
+        );
+          const dayDropdown = component.find(Dropdown).at(0);
+          const monthDropdown = component.find(Dropdown).at(1);
+          const yearDropdown = component.find(Dropdown).at(2);
+          dayDropdown.simulate('change', '11');
+          expect(blurMockFn).toHaveBeenCalledWith('2016-12-11');
+          component.setProps({ input: { value: null } });
+          dayDropdown.simulate('change', '11');
+          expect(changeMockFn).toHaveBeenCalledWith('--11');
+      });
+```
+
+---
+## Simulate apps during test execution
+```javascript
+    const navigatorBackup = window.navigator;
+
+    afterEach(() => {
+      // reset user agent
+      Object.defineProperty(window.navigator, 'userAgent', {
+      value: navigatorBackup,
+      writable: true,
+    });
+
+    it('does what it should do running on iOS <13', () => {
+        myApplication.isAppMode.mockReturnValue(true);
+        Object.defineProperty(window.navigator, 'platform', {
+            value: 'iPod',
+            writable: true,
+        });
+        Object.defineProperty(window.navigator, 'appVersion', {
+            value: 'iOS 11.2',
+            writable: true,
+        });
+        // your test
+        // your assertion
+    });
+```
+
+---
+## Test errors
+```javascript
+    it('throws an error if `myParam` parameter is missing', () => {
+      expect(() => myFunc('', {})).toThrow(
+        new TypeError('myParam argument for myFunc is missing')
+      );
+    });
+```
+
+---
+## Keyboard interaction
+```javascript
+describe('Tooltip events', () => {
+  it('should react to Escape keydown', () => {
+    const mockFn = jest.fn();
+    const map = {};
+    window.addEventListener = jest.fn((event, cb) => {
+      map[event] = cb;
+    });
+
+    mount(
+      <Tooltip
+        translation={{ title: 'Title', closeButton: 'Close' }}
+        onClose={mockFn}
+        visible
+      >
+        Test
+      </Tooltip>
+    );
+
+    map.keydown({ key: 'Escape' });
+    map.keyup({ key: 'Escape' });
+
+    expect(mockFn).toHaveBeenCalled();
+  });
+});
+```
+// Source: https://medium.com/@DavideRama/testing-global-event-listener-within-a-react-component-b9d661e59953
+
+
+---
+## API testing
+```javascript
+fakeApi.method({options: true});
+expect(fakeApi.method).toHaveBeenCalledWith({options:true});
+```
+```javascript
+const callback = (result) => console.log(result);
+fakeApi.asyncOperation(callback);
+expect(fakeApi.method).toHaveBeenCalledWith(callback);
+```
+```javascript
+fakeApi.doAsync((result) => console.log(result));
+expect(fakeApi.doAsync).toHaveBeenCalledWith(expect.any(Function));
+```
+
+---
+## Async function mocking
+```javascript
+const myAsyncFunc = () => 
+    new Promise((resolve, reject) => someFunc());
+
+myAsyncFunc.mockResolvedValue({
+   prop1: 42,
+});
+```
+```javascript
+mockFn.mockResolvedValue(value)
+mockFn.mockResolvedValueOnce(value)
+mockFn.mockRejectedValue(value)
+mockFn.mockRejectedValueOnce(value)
+```
+
+---
+## Async function mocking: fetch abstraction example
+```javascript
+jest.mock('../fetchAbstraction', () =>
+  jest.fn(
+    url =>
+      new Promise((resolve, reject) => {
+        if (url === 'http://rejectsAfterTimeoutApiDoesNotRespond') {
+          setTimeout(resolve, 4600);
+          return;
+        }
+        if (url !== 'http://reject') {
+          resolve({
+            json: () => 'JSON',
+            ok: true,
+            status: 200,
+          });
+        } else {
+          reject(new Error('a bad error'));
+        }
+      })
+  )
+);
+```
+
+---
+## Do not forget to reset mocks
+```javascript
+describe('component, which fetch data on componentDidMount', () => {
+  beforeEach(() => {
+    fetch.resetMocks();
+  });
+
+    it('should render', async () => {
+      fetch.mockResponse('My data');
+
+      const component = renderer.create(
+          <Component />
+      );
+      expect(component.toJSON()).toMatchSnapshot();
+    });
+
+});
+```
+
+---
+## Mock modules: default component export
+```javascript
+jest.mock('../path/MyComponent', () => ({ children, ...rest }) => (
+  <div>
+        <h1>My component</h1>
+        <div {...rest}>
+            {children}
+         </div>
+    </div>  
+));
+```
+
+---
+### Mock modules: named export
+```javascript
+jest.mock('../../path/myHelpers.js', () => ({
+  __esModule: true,
+  helper1: jest.fn(),
+  helper2:  () => ['data'],
+  helper3: jest
+    .fn()
+    .mockReturnValueOnce('valueToReturnOnThe1stCall')
+    .mockReturnValueOnce('valueToReturnOnThe2ndCall'),  
+}));
+```
+
+---
+## Snapshots
+**Pro**
+
+
+- fast and easy to write
+- check if your component behaves correctly
+- allows conditional rendering tests
+
+**Contra**
+
+
+- larger snapshots are not easy to handle =&gt; eslint plugin `no-large-snapshots`  
+- issues with translations and CSS in JS classes
+
+
+		</textarea>
+		<script src="https://gnab.github.io/remark/downloads/remark-latest.min.js"></script>
+		<script>
+			var slideshow = remark.create();
+		</script>
+		<script></script>
+	</body>
+</html>
